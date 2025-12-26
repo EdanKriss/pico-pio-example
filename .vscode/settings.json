@@ -1,0 +1,23 @@
+{
+  // Associate linker scripts with C for syntax highlighting
+  "files.associations": {
+    "*.x": "c",
+    "memory.x": "c"
+  },
+
+  // Configure rust-analyzer for embedded ARM target
+  "rust-analyzer.cargo.target": "thumbv6m-none-eabi",
+
+  /* Disable on-save code checks for /tests, /examples, /benches, and code blocks marked with #[cfg(test)]
+   *
+   * This is necessary because #![no_std] means no test module, and rust-analyzer will throw this error from main.rs:
+   * 
+   */
+  // "rust-analyzer.check.allTargets": false,
+
+  // Use clippy for additional linting (optional)
+  "rust-analyzer.check.command": "clippy",
+
+  // Embedded projects don't have tests in the usual way
+  "rust-analyzer.cargo.noDefaultFeatures": false
+}

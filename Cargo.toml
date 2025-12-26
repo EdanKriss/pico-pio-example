@@ -1,0 +1,47 @@
+[package]
+name = "pico-project"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "pico-project"
+path = "src/main.rs"
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+
+# Low-level access to ARM Cortex-M processor features (the CPU in RP2040)
+cortex-m = "0.7.7"
+
+# Runtime/startup code for Cortex-M microcontrollers - runs before main()
+cortex-m-rt = "0.7.3"
+
+# Standard hardware abstraction layer traits for embedded systems
+embedded-hal = "1.0.0"
+
+# Hardware abstraction layer specifically for the RP2040 chip (Pico W's processor)
+# The rp2040-e5 feature enables fixes for a hardware bug in the chip
+# critical-section-impl provides the critical section implementation needed for thread safety
+rp2040-hal = { version = "0.11.0", features = ["critical-section-impl"] }
+
+# Second stage bootloader required by RP2040 to configure flash memory
+rp2040-boot2 = "0.3.0"
+
+# Simple panic handler that halts the processor when code panics
+panic-halt = "1.0.0"
+
+# Time/duration types for embedded systems (delays, timing, etc.)
+fugit = "0.3.7"
+
+# Smart LED (WS2812/NeoPixel) control using RP2040's PIO peripheral
+smart-leds = "0.4.0"
+ws2812-pio = "0.9.0"
+
+# Optimize for small binary size
+[profile.release]
+opt-level = "z"      # Optimize for size
+lto = true           # Link-time optimization
+codegen-units = 1    # Better optimization at cost of compile time
+debug = true         # Keep debug info for easier debugging

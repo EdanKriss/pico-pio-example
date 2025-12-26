@@ -1,0 +1,20 @@
+# Tell cargo to build for ARM Cortex-M0+ (the CPU in RP2040)
+[build]
+target = "thumbv6m-none-eabi"  # thumbv6m = ARMv6-M instruction set, none = no OS, eabi = embedded ABI
+
+# Use flip-link to provide stack overflow protection by flipping stack and heap
+# This is optional but recommended for embedded development
+# [target.'cfg(all(target_arch = "arm", target_os = "none"))']
+# runner = "probe-rs run --chip RP2040"
+
+[target.thumbv6m-none-eabi]
+# Automatically convert and flash to Pico when running `cargo run`
+runner = "elf2uf2-rs -d"
+
+# Use the cortex-m-rt runtime as the entry point
+rustflags = [
+  "-C", "link-arg=--nmagic",  # Don't page-align sections (saves space)
+  "-C", "link-arg=-Tlink.x",  # Use link.x linker script from cortex-m-rt
+  "-C", "no-vectorize-loops", # Disable loop vectorization (smaller code)
+  "-C", "no-vectorize-slp",   # Disable superword-level parallelism (smaller code)
+]
