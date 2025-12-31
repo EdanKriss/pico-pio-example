@@ -13,7 +13,7 @@ MEMORY {
     RAM   : ORIGIN = 0x20000000, LENGTH = 264K
 }
 
-/* Tell the bootloader to use the rp2040-boot2 crate */
+/* rp2040-boot2 symbol */
 EXTERN(BOOT2_FIRMWARE)
 
 SECTIONS {

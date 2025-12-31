@@ -11,11 +11,24 @@ use smart_leds::{brightness, SmartLedsWrite, RGB8};
 use ws2812_pio::Ws2812;
 use fugit::ExtU32;
 
-// Link the second stage bootloader for RP2040 to the .boot2 section in memory.x 
+// Link the second stage bootloader for RP2040 to the .boot2 section in memory.x
 // In Rust 2024, link_section requires unsafe wrapper
 #[unsafe(link_section = ".boot2")]
 #[used]
 static BOOT2: [u8; 256] = BOOT_LOADER_GENERIC_03H;
+
+fn error_beep<P: OutputPin>(buzzer: &mut P, delay: &mut cortex_m::delay::Delay) {
+    const DURATION_MS: u32 = 200;
+    const HALF_PERIOD_US: u32 = 250; // ~2kHz tone
+    let cycles = (DURATION_MS * 1000) / (HALF_PERIOD_US * 2);
+
+    for _ in 0..cycles {
+        let _ = buzzer.set_high();
+        delay.delay_us(HALF_PERIOD_US);
+        let _ = buzzer.set_low();
+        delay.delay_us(HALF_PERIOD_US);
+    }
+}
 
 #[entry]
 fn main() -> ! {
@@ -66,10 +79,11 @@ fn main() -> ! {
         timer.count_down(),
     );
 
-    // Keep GPIO 7 for the simple LED blinking
+    // GPIO 7
     let mut simple_led = pins.gpio7.into_push_pull_output();
 
-    let mut error_led = pins.gpio8.into_push_pull_output();
+    // GPIO 20
+    let mut error_buzzer = pins.gpio20.into_push_pull_output();
 
     let mut leds = [RGB8::default(); 1];
 
@@ -83,28 +97,28 @@ fn main() -> ! {
         // Red color
         leds[0] = RGB8::new(255, 0, 0);
         if rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_led.set_high().unwrap();
+            error_beep(&mut error_buzzer, &mut delay);
         }
         delay.delay_ms(1000);
 
         // Green color
         leds[0] = RGB8::new(0, 255, 0);
         if rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_led.set_high().unwrap();
+            error_beep(&mut error_buzzer, &mut delay);
         }
         delay.delay_ms(1000);
 
         // Blue color
         leds[0] = RGB8::new(0, 0, 255);
         if rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_led.set_high().unwrap();
+            error_beep(&mut error_buzzer, &mut delay);
         }
         delay.delay_ms(1000);
 
         // Turn off
         leds[0] = RGB8::new(0, 0, 0);
         if rgb_led.write(leds.iter().copied()).is_err() {
-            error_led.set_high().unwrap();
+            error_beep(&mut error_buzzer, &mut delay);
         }
         delay.delay_ms(1000);
 
