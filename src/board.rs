@@ -5,7 +5,7 @@ use hal::pio::SM0;
 use hal::Clock;
 use ws2812_pio::Ws2812;
 
-// Type aliases for our specific hardware configuration
+// PicoBricks hardware configuration
 pub type SimpleLedPin = Pin<Gpio7, FunctionSio<SioOutput>, PullDown>;
 pub type BuzzerPin = Pin<Gpio20, FunctionSio<SioOutput>, PullDown>;
 pub type RgbPin = Pin<Gpio6, FunctionPio0, PullDown>;
