@@ -1,137 +1,111 @@
 #![no_std]
 #![no_main]
 
+mod board;
+
 use rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 use panic_halt as _;
 use cortex_m_rt::entry;
-use rp2040_hal as hal;
-use hal::Clock;
 use embedded_hal::digital::OutputPin;
 use smart_leds::{brightness, SmartLedsWrite, RGB8};
-use ws2812_pio::Ws2812;
 use fugit::ExtU32;
 
-// Link the second stage bootloader for RP2040 to the .boot2 section in memory.x
-// In Rust 2024, link_section requires unsafe wrapper
+use board::Board;
+
+// Link the second stage bootloader for RP2040 to the .boot2 section in memory.x                                                                     
+// In Rust 2024, link_section requires unsafe wrapper   
 #[unsafe(link_section = ".boot2")]
 #[used]
 static BOOT2: [u8; 256] = BOOT_LOADER_GENERIC_03H;
 
-fn error_beep<P: OutputPin>(buzzer: &mut P, delay: &mut cortex_m::delay::Delay) {
-    const DURATION_MS: u32 = 200;
-    const HALF_PERIOD_US: u32 = 250; // ~2kHz tone
-    let cycles = (DURATION_MS * 1000) / (HALF_PERIOD_US * 2);
+fn play_tone(
+    Board {
+        delay,
+        buzzer,
+        ..
+    }: &mut Board,
+    freq_hz: u32,
+    duration_ms: u32,
+) {
+    if freq_hz == 0 {
+        delay.delay_ms(duration_ms);
+        return;
+    }
+
+    let half_period_us = 500_000 / freq_hz;
+    let cycles = (duration_ms * 1000) / (half_period_us * 2);
 
     for _ in 0..cycles {
         let _ = buzzer.set_high();
-        delay.delay_us(HALF_PERIOD_US);
+        delay.delay_us(half_period_us);
         let _ = buzzer.set_low();
-        delay.delay_us(HALF_PERIOD_US);
+        delay.delay_us(half_period_us);
     }
+}
+
+fn error_beep(board: &mut Board) {
+    play_tone(board, 2000, 200);
+}
+
+fn zelda_chest_sound(board: &mut Board) {
+    // Note frequencies
+    const A4: u32 = 440;
+    const CS5: u32 = 554;
+    const E5: u32 = 659;
+    const A5: u32 = 880;
+
+    // Quick ascending arpeggio
+    play_tone(board, A4, 100);
+    play_tone(board, CS5, 100);
+    play_tone(board, E5, 100);
+    // Triumphant sustained note
+    play_tone(board, A5, 600);
 }
 
 #[entry]
 fn main() -> ! {
-    let core = hal::pac::CorePeripherals::take().unwrap();
-    let mut pac = hal::pac::Peripherals::take().unwrap();
-
-    let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
-
-    let clocks = hal::clocks::init_clocks_and_plls(
-        12_000_000u32, // 12 MHz crystal oscillator frequency, can import this value from 'use rp_pico::XOSC_CRYSTAL_FREQ'
-        pac.XOSC,
-        pac.CLOCKS,
-        pac.PLL_SYS,
-        pac.PLL_USB,
-        &mut pac.RESETS,
-        &mut watchdog,
-    )
-    .expect("clock init failed");
-
-    // Set up the GPIO pins using the Single Cycle I/O (SIO) block
-    let sio = hal::Sio::new(pac.SIO);
-    let pins = hal::gpio::Pins::new(
-        pac.IO_BANK0,
-        pac.PADS_BANK0,
-        sio.gpio_bank0,
-        &mut pac.RESETS,
-    );
-
-    let mut delay = cortex_m::delay::Delay::new(
-        core.SYST,
-        clocks.system_clock.freq().to_Hz(),
-    );
-
-    let timer = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
-
-    // Set up the PIO (Programmable I/O) peripheral for WS2812 control
-    // The PIO is a specialized coprocessor that can generate precise timing
-    use hal::pio::PIOExt;
-    let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
-
-    // Configure GPIO 6 for the WS2812 RGB LED
-    // WS2812 LEDs need precise timing that the PIO peripheral provides
-    let mut rgb_led = Ws2812::new(
-        pins.gpio6.into_function(),
-        &mut pio,
-        sm0,
-        clocks.peripheral_clock.freq(),
-        timer.count_down(),
-    );
-
-    // GPIO 7
-    let mut simple_led = pins.gpio7.into_push_pull_output();
-
-    // GPIO 20
-    let mut error_buzzer = pins.gpio20.into_push_pull_output();
+    let mut board = Board::init();
+    zelda_chest_sound(&mut board);
 
     let mut leds = [RGB8::default(); 1];
 
-    watchdog.start(8_u32.secs());
+    board.watchdog.start(8_u32.secs());
 
     loop {
-        /*
-         * Smart LED
-         */
-
-        // Red color
+        // Red
         leds[0] = RGB8::new(255, 0, 0);
-        if rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_beep(&mut error_buzzer, &mut delay);
+        if board.rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
+            error_beep(&mut board);
         }
-        delay.delay_ms(1000);
+        board.delay.delay_ms(1000);
 
-        // Green color
+        // Green
         leds[0] = RGB8::new(0, 255, 0);
-        if rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_beep(&mut error_buzzer, &mut delay);
+        if board.rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
+            error_beep(&mut board);
         }
-        delay.delay_ms(1000);
+        board.delay.delay_ms(1000);
 
-        // Blue color
+        // Blue
         leds[0] = RGB8::new(0, 0, 255);
-        if rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_beep(&mut error_buzzer, &mut delay);
+        if board.rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
+            error_beep(&mut board);
         }
-        delay.delay_ms(1000);
+        board.delay.delay_ms(1000);
 
-        // Turn off
+        // Off
         leds[0] = RGB8::new(0, 0, 0);
-        if rgb_led.write(leds.iter().copied()).is_err() {
-            error_beep(&mut error_buzzer, &mut delay);
+        if board.rgb_led.write(leds.iter().copied()).is_err() {
+            error_beep(&mut board);
         }
-        delay.delay_ms(1000);
+        board.delay.delay_ms(1000);
 
-        /*
-         * Simple LED
-         */
+        // Simple LED blink
+        let _ = board.simple_led.set_high();
+        board.delay.delay_ms(500);
+        let _ = board.simple_led.set_low();
+        board.delay.delay_ms(500);
 
-        // Blink on then off
-        simple_led.set_high().unwrap();
-        delay.delay_ms(500);
-        simple_led.set_low().unwrap();
-        delay.delay_ms(500);
-
-        watchdog.feed();
+        board.watchdog.feed();
     }
 }
