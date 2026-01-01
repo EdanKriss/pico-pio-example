@@ -44,7 +44,13 @@ fn play_tone(
 }
 
 fn error_beep(board: &mut Board) {
-    play_tone(board, 2000, 200);
+    // Descending minor third - classic "uh-oh" error sound
+    const HIGH: u32 = 400;
+    const LOW: u32 = 320;  // Minor third below
+
+    play_tone(board, HIGH, 150);
+    play_tone(board, 0, 50);  // Brief gap
+    play_tone(board, LOW, 300);
 }
 
 fn zelda_chest_sound(board: &mut Board) {
