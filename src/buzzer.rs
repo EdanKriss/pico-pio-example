@@ -1,4 +1,3 @@
-// trait required to call set_low and set_high
 use embedded_hal::digital::OutputPin;
 
 use crate::board::Board;
@@ -12,7 +11,7 @@ fn play_tone(
     freq_hz: u32,
     duration_ms: u32,
 ) {
-    // return to avoid divide by zero
+    // Return to avoid divide by zero
     if freq_hz == 0 {
         delay.delay_ms(duration_ms);
         return;
@@ -30,7 +29,7 @@ fn play_tone(
 }
 
 pub fn error_beep(board: &mut Board) {
-    // Descending minor third - "uh-oh"
+    // Descending minor third, like "uh-oh"
     const HIGH: u32 = 400;
     const LOW: u32 = 320;
 
