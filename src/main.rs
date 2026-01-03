@@ -3,19 +3,23 @@
 
 mod board;
 mod buzzer;
+mod rgb_led;
 
 use rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 use panic_halt as _;
 use cortex_m_rt::entry;
 use embedded_hal::digital::OutputPin;
-use smart_leds::{brightness, SmartLedsWrite, RGB8};
+use smart_leds::{RGB8};
 use fugit::ExtU32;
 
 use crate::board::Board;
-use crate::buzzer::{error_beep, zelda_chest_sound};
+use crate::buzzer::{zelda_chest_sound};
+use crate::rgb_led::{LedChainUpdate, simple_ws2812_sequence};
 
-// Link the second stage bootloader for RP2040 to the .boot2 section in memory.x                                                                     
-// In Rust 2024, link_section requires unsafe wrapper   
+/**
+ *  Link the second stage bootloader for RP2040 to the .boot2 section in memory.x
+ *  In Rust 2024, link_section requires unsafe wrapper
+ */
 #[unsafe(link_section = ".boot2")]
 #[used]
 static BOOT2: [u8; 256] = BOOT_LOADER_GENERIC_03H;
@@ -25,38 +29,17 @@ fn main() -> ! {
     let mut board = Board::init();
     zelda_chest_sound(&mut board);
 
-    let mut leds = [RGB8::default(); 1];
+    let color_sequence: [LedChainUpdate; 4] = [
+        [ RGB8::new(32, 0, 0) ], // Red
+        [ RGB8::new(0, 32, 0) ], // Green
+        [ RGB8::new(0, 0, 32) ], // Blue
+        [ RGB8::new(0, 0, 0) ], // Off
+    ];
 
     board.watchdog.start(8_u32.secs());
 
     loop {
-        // Red
-        leds[0] = RGB8::new(255, 0, 0);
-        if board.rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_beep(&mut board);
-        }
-        board.delay.delay_ms(1000);
-
-        // Green
-        leds[0] = RGB8::new(0, 255, 0);
-        if board.rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_beep(&mut board);
-        }
-        board.delay.delay_ms(1000);
-
-        // Blue
-        leds[0] = RGB8::new(0, 0, 255);
-        if board.rgb_led.write(brightness(leds.iter().copied(), 32)).is_err() {
-            error_beep(&mut board);
-        }
-        board.delay.delay_ms(1000);
-
-        // Off
-        leds[0] = RGB8::new(0, 0, 0);
-        if board.rgb_led.write(leds.iter().copied()).is_err() {
-            error_beep(&mut board);
-        }
-        board.delay.delay_ms(1000);
+        simple_ws2812_sequence(&color_sequence, 300, &mut board);
 
         // Simple LED blink
         let _ = board.simple_led.set_high();
