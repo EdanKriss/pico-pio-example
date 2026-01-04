@@ -3,13 +3,13 @@ use smart_leds::{SmartLedsWrite, RGB8};
 
 /**
  *  One element for each LED in chain.
- *  This is the type to pass to SmartLedsWrite::write()
+ *  This is the type passed to SmartLedsWrite::write()
  */
 type LedChainUpdate<const LED_CHAIN_LENGTH: usize> =
     [RGB8; LED_CHAIN_LENGTH];
 
 /**
- *  One element for each LedChainUpdate, corresponding to steps in a sequence
+ *  One element for each LedChainUpdate, corresponding to steps in a sequence.
  */
 type LedChainSequence<const LED_CHAIN_LENGTH: usize, const SEQUENCE_LENGTH: usize> =
     [LedChainUpdate<LED_CHAIN_LENGTH>; SEQUENCE_LENGTH];

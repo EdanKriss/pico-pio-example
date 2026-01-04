@@ -5,16 +5,17 @@ use hal::pio::PIOExt;
 use hal::Clock;
 use ws2812_pio::Ws2812;
 
-// PicoBricks hardware configuration
-pub type RgbPin = Pin<Gpio6, FunctionPio0, PullDown>;
+// PicoBricks board hardware configuration
+pub type RgbLedPin = Pin<Gpio6, FunctionPio0, PullDown>;
 pub type SimpleLedPin = Pin<Gpio7, FunctionSio<SioOutput>, PullDown>;
 pub type BuzzerPin = Pin<Gpio20, FunctionSio<SioOutput>, PullDown>;
-pub type RgbLed = Ws2812<hal::pac::PIO0, hal::pio::SM0, hal::timer::CountDown, RgbPin>;
+
+pub type RgbLedChain = Ws2812<hal::pac::PIO0, hal::pio::SM0, hal::timer::CountDown, RgbLedPin>;
 
 pub struct Board {
     pub timer: hal::Timer,
     pub watchdog: hal::Watchdog,
-    pub rgb_led: RgbLed,
+    pub rgb_led_chain: RgbLedChain,
     pub simple_led: SimpleLedPin,
     pub buzzer: BuzzerPin,
 }
@@ -51,7 +52,7 @@ impl Board {
             _, _, _
         ) = pac.PIO0.split(&mut pac.RESETS);
 
-        let rgb_led = Ws2812::new(
+        let rgb_led_chain = Ws2812::new(
             pins.gpio6.into_function(),
             &mut pio,
             sm0,
@@ -66,7 +67,7 @@ impl Board {
         Self {
             timer,
             watchdog,
-            rgb_led,
+            rgb_led_chain,
             simple_led,
             buzzer,
         }

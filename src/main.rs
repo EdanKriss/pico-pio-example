@@ -43,7 +43,7 @@ fn main() -> ! {
         if smart_leds_simple_sequence(
             &sequence,
             300,
-            &mut board.rgb_led,
+            &mut board.rgb_led_chain,
             &mut board.timer
         ).is_err() 
         {
