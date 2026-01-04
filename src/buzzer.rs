@@ -1,10 +1,11 @@
+use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 
 use crate::board::Board;
 
 fn play_tone(
     Board {
-        delay,
+        timer,
         buzzer,
         ..
     }: &mut Board,
@@ -13,7 +14,7 @@ fn play_tone(
 ) {
     // Return to avoid divide by zero
     if freq_hz == 0 {
-        delay.delay_ms(duration_ms);
+        timer.delay_ms(duration_ms);
         return;
     }
 
@@ -22,9 +23,9 @@ fn play_tone(
 
     for _ in 0..cycles {
         let _ = buzzer.set_high();
-        delay.delay_us(half_period_us);
+        timer.delay_us(half_period_us);
         let _ = buzzer.set_low();
-        delay.delay_us(half_period_us);
+        timer.delay_us(half_period_us);
     }
 }
 
@@ -34,7 +35,7 @@ pub fn error_beep(board: &mut Board) {
     const LOW: u32 = 320;
 
     play_tone(board, HIGH, 150);
-    board.delay.delay_ms(50);
+    board.timer.delay_ms(50);
     play_tone(board, LOW, 300);
 }
 

@@ -12,7 +12,7 @@ pub type BuzzerPin = Pin<Gpio20, FunctionSio<SioOutput>, PullDown>;
 pub type RgbLed = Ws2812<hal::pac::PIO0, hal::pio::SM0, hal::timer::CountDown, RgbPin>;
 
 pub struct Board {
-    pub delay: cortex_m::delay::Delay,
+    pub timer: hal::Timer,
     pub watchdog: hal::Watchdog,
     pub rgb_led: RgbLed,
     pub simple_led: SimpleLedPin,
@@ -21,7 +21,6 @@ pub struct Board {
 
 impl Board {
     pub fn init() -> Self {
-        let core = hal::pac::CorePeripherals::take().unwrap();
         let mut pac = hal::pac::Peripherals::take().unwrap();
 
         let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
@@ -44,10 +43,7 @@ impl Board {
             &mut pac.RESETS,
         );
 
-        let delay = cortex_m::delay::Delay::new(
-            core.SYST,
-            clocks.system_clock.freq().to_Hz(),
-        );
+        let timer = hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
 
         let (
             mut pio,
@@ -60,7 +56,7 @@ impl Board {
             &mut pio,
             sm0,
             clocks.peripheral_clock.freq(),
-            hal::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks).count_down(),
+            timer.count_down(),
         );
 
         let simple_led = pins.gpio7.into_push_pull_output();
@@ -68,7 +64,7 @@ impl Board {
         let buzzer = pins.gpio20.into_push_pull_output();
 
         Self {
-            delay,
+            timer,
             watchdog,
             rgb_led,
             simple_led,
