@@ -3,7 +3,7 @@ use smart_leds::{SmartLedsWrite, RGB8};
 
 /**
  *  One element for each LED in chain.
- *  This is the type to pass to Ws2812.write()
+ *  This is the type to pass to SmartLedsWrite::write()
  */
 type LedChainUpdate<const LED_CHAIN_LENGTH: usize> =
     [RGB8; LED_CHAIN_LENGTH];
@@ -22,17 +22,20 @@ pub type PicoBricksRgbLedSequence<const SEQUENCE_LENGTH: usize> =
 
 /**
  *  Iterates through color_sequence, setting LED chain with each update element
- *  in order, waiting step_duration ms before each.
+ *  in order, waiting step_duration ms after each.
+ *
+ *  Works with any addressable LED chain driver instance that implements 
+ *  SmartLedsWrite<Color = RGB8>, such as WS2812, APA102, SK6812 (RGB mode)
  */
-pub fn simple_ws2812_sequence<
-    LedDriver,
-    Timer,
+pub fn smart_leds_simple_sequence<
     const LED_CHAIN_LENGTH: usize,
-    const SEQUENCE_LENGTH: usize
+    const SEQUENCE_LENGTH: usize,
+    LedDriver,
+    Timer
 >(
     color_sequence: &LedChainSequence<LED_CHAIN_LENGTH, SEQUENCE_LENGTH>,
     step_duration: u32,
-    led: &mut LedDriver,
+    led_chain: &mut LedDriver,
     timer: &mut Timer,
 ) -> Result<(), LedDriver::Error>
 where
@@ -40,7 +43,7 @@ where
     Timer: DelayNs,
 {
     for update in color_sequence {
-        led.write(*update)?;
+        led_chain.write(update.iter().copied())?;
         timer.delay_ms(step_duration);
     }
     Ok(())

@@ -15,7 +15,7 @@ use fugit::ExtU32;
 
 use crate::board::Board;
 use crate::buzzer::{error_beep, zelda_chest_sound};
-use crate::rgb_led::{PicoBricksRgbLedSequence, simple_ws2812_sequence};
+use crate::rgb_led::{PicoBricksRgbLedSequence, smart_leds_simple_sequence};
 
 /**
  *  Link the second stage bootloader for RP2040 to the .boot2 section in memory.x
@@ -40,7 +40,7 @@ fn main() -> ! {
     board.watchdog.start(8_u32.secs());
 
     loop {
-        if simple_ws2812_sequence(
+        if smart_leds_simple_sequence(
             &sequence,
             300,
             &mut board.rgb_led,
