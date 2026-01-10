@@ -26,6 +26,10 @@ embedded-hal = "1.0.0"
 # critical-section-impl provides the critical section implementation needed for thread safety
 rp2040-hal = { version = "0.11.0", features = ["critical-section-impl"] }
 
+# Critical section for safe cross-core data sharing (rp2040-hal provides the implementation)
+# Replaces std::sync::Mutex
+critical-section = "1.2"
+
 # Second stage bootloader required by RP2040 to configure flash memory
 rp2040-boot2 = "0.3.0"
 
