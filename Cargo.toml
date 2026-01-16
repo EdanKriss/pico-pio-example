@@ -16,17 +16,17 @@ bench = false
 cortex-m = "0.7.7"
 
 # Runtime/startup code for Cortex-M microcontrollers - runs before main()
-cortex-m-rt = "0.7.3"
+cortex-m-rt = "0.7.5"
 
 # Standard hardware abstraction layer traits for embedded systems
 embedded-hal = "1.0.0"
 
 # Hardware abstraction layer specifically for the RP2040 chip (Pico W's processor)
-# The rp2040-e5 feature enables fixes for a hardware bug in the chip
-# critical-section-impl provides the critical section implementation needed for thread safety
-rp2040-hal = { version = "0.11.0", features = ["critical-section-impl"] }
+# critical-section-impl provides the critical-section implementation needed for thread safety
+# rt enables the #[interrupt] attribute for defining device-specific interrupt handlers
+rp2040-hal = { version = "0.11.0", features = ["critical-section-impl", "rt"] }
 
-# Critical section for safe cross-core data sharing (rp2040-hal provides the implementation)
+# Critical section for safe cross-core data sharing (rp2040-hal implementation)
 # Replaces std::sync::Mutex
 critical-section = "1.2"
 
@@ -37,11 +37,14 @@ rp2040-boot2 = "0.3.0"
 panic-halt = "1.0.0"
 
 # Time/duration types for embedded systems (delays, timing, etc.)
-fugit = "0.3.7"
+fugit = "0.3.9"
 
 # Smart LED (WS2812/NeoPixel) control using RP2040's PIO peripheral
 smart-leds = "0.4.0"
 ws2812-pio = "0.9.0"
+
+# PIO assembler for building PIO programs at compile time
+pio = "0.2.1"
 
 # Optimize for small binary size
 [profile.release]
