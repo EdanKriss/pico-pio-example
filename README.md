@@ -1,12 +1,13 @@
-# Pico W Rust Project
+# Pico W Rust PIO Project
 
-An exploratory Rust project for Raspberry Pi Pico W with PicoBricks.
+An exploratory Rust project for Raspberry Pi Pico W.
+The PicoBricks dev board was used, but it is possible to recreate the setup with a few peripherals.
 
 The Pico has one feature that is somewhat unique in its class: Programmable IO.
 These effectively serve as 8 separate state machines that can operate on IO as it comes in with deterministic timing.
 
 This project seeks to utilize PIO for input peripherals, such as the IR sensor.
-Interrupts are registered for incoming data, allowing core1 to sleep when data is not arriving.
+Interrupts are registered to fire on incoming data, allowing core1 to sleep when data is not arriving.
 
 ## Prerequisites
 

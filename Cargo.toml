@@ -1,10 +1,10 @@
 [package]
-name = "pico-project"
+name = "pico-pio-example"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "pico-project"
+name = "pico-pio-example"
 path = "src/main.rs"
 test = false
 doctest = false
