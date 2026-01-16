@@ -1,16 +1,23 @@
 # Pico W Rust Project
 
-A barebones Rust project for Raspberry Pi Pico W with PicoBricks. This blinks the RGB LED on GPIO 6.
+An exploratory Rust project for Raspberry Pi Pico W with PicoBricks.
+
+The Pico has one feature that is somewhat unique in its class: Programmable IO.
+These effectively serve as 8 separate state machines that can operate on IO as it comes in with deterministic timing.
+
+This project seeks to utilize PIO for input peripherals, such as the IR sensor.
+Interrupts are registered for incoming data, allowing core1 to sleep when data is not arriving.
 
 ## Prerequisites
 
-1. **Rust toolchain** - You already have this if you created the project
+1. **Rust toolchain** - Rustup and Cargo were used in development
+
 2. **ARM target** - Install with:
    ```bash
    rustup target add thumbv6m-none-eabi
    ```
 
-3. **elf2uf2-rs** (optional but recommended) - For easy flashing:
+3. **elf2uf2-rs** - Optional but recommended global for easy flashing:
    ```bash
    cargo install elf2uf2-rs
    ```
@@ -18,11 +25,10 @@ A barebones Rust project for Raspberry Pi Pico W with PicoBricks. This blinks th
 ## Hardware Setup
 
 **For PicoBricks:**
-- The RGB LED is already connected to GPIO 6 (GP6 terminal)
-- No additional wiring needed - just flash and run!
+- This project is ready to flash to PicoBricks: the peripherals and GPIO pins match the PicoBricks.
 
 **For custom setup:**
-- Connect an LED between GPIO 6 and GND with a 220-330Ω resistor
+- Review the peripherals and GPIO pins used in `src/board.rs`
 
 ## Building
 
