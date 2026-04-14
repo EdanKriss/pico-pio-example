@@ -28,7 +28,7 @@ static BOOT2: [u8; 256] = BOOT_LOADER_GENERIC_03H;
 fn main() -> ! {
     let (mut board, core1_peripherals) = board::Board::init();
 
-    // zelda_chest_sound(&mut board);
+    zelda_chest_sound(&mut board);
 
     main_core1::spawn(
         &mut board.multicore_peripherals,

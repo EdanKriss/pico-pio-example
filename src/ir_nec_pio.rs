@@ -19,8 +19,8 @@
 //! The FIFO is 4 entries deep; a full NEC transmission produces ~34 values.
 //! Missing values will cause decode failures but won't corrupt state.
 
-use pio::{Assembler, JmpCondition, MovDestination, MovOperation, MovSource};
-use rp2040_hal::pio::{PIOBuilder, PinDir, PioIRQ, Rx, SM0};
+use pio::{Assembler, InSource, JmpCondition, MovDestination, MovOperation, MovSource, SetDestination};
+use rp2040_hal::pio::{PIOBuilder, PinDir, PioIRQ, Rx, ShiftDirection, SM0};
 
 use crate::board::{IrReceiverPin, IrReceiverPinPio, Pio1, Pio1SM0};
 
@@ -77,8 +77,9 @@ pub mod buttons {
 
 /// Build the PIO program for IR pulse/space measurement
 ///
-/// Output: alternating pulse (low) / space (high) durations in PIO cycles
-/// Higher values = longer durations
+/// Each pushed FIFO word is `(count << 1) | polarity`, where polarity is 0
+/// for a pulse (pin low) and 1 for a space (pin high). Encoding polarity in
+/// the word itself lets software stay in sync even if a FIFO entry is dropped.
 fn build_ir_program() -> pio::Program<32> {
     let mut a = Assembler::<32>::new();
 
@@ -92,7 +93,8 @@ fn build_ir_program() -> pio::Program<32> {
     a.bind(&mut wait_start);
     a.jmp(JmpCondition::PinHigh, &mut wait_start);
 
-    // Pin is now LOW - start measuring pulse duration
+    // Pin is now LOW - polarity = 0 (pulse), start measuring
+    a.set(SetDestination::Y, 0);
     a.mov(MovDestination::X, MovOperation::Invert, MovSource::NULL);
 
     // Count while pin is low (pulse duration)
@@ -101,16 +103,21 @@ fn build_ir_program() -> pio::Program<32> {
     a.jmp(JmpCondition::XDecNonZero, &mut count_low);
 
     a.bind(&mut low_done);
+    // ISR = count (mov resets input shift counter to 0)
     a.mov(MovDestination::ISR, MovOperation::Invert, MovSource::X);
+    // Shift polarity bit into ISR LSB: ISR = (count << 1) | 0
+    a.r#in(InSource::Y, 1);
     a.push(false, false);
 
-    // Now pin is high - count space duration
+    // Pin is now HIGH - polarity = 1 (space), start measuring
+    a.set(SetDestination::Y, 1);
     a.mov(MovDestination::X, MovOperation::Invert, MovSource::NULL);
 
     a.bind(&mut count_high);
     a.jmp(JmpCondition::PinHigh, &mut cont_high);
-    // Pin went low - done counting high, push and restart
+    // Pin went low - done counting space, push and restart
     a.mov(MovDestination::ISR, MovOperation::Invert, MovSource::X);
+    a.r#in(InSource::Y, 1);
     a.push(false, false);
     a.jmp(JmpCondition::Always, &mut wait_start);
 
@@ -118,6 +125,7 @@ fn build_ir_program() -> pio::Program<32> {
     a.jmp(JmpCondition::XDecNonZero, &mut count_high);
     // X reached zero (timeout) - push anyway and restart
     a.mov(MovDestination::ISR, MovOperation::Invert, MovSource::X);
+    a.r#in(InSource::Y, 1);
     a.push(false, false);
     a.jmp(JmpCondition::Always, &mut wait_start);
 
@@ -235,7 +243,6 @@ impl NecDecoder {
 pub struct NecIrDecoder {
     rx: Rx<(rp2040_hal::pac::PIO1, SM0)>,
     decoder: NecDecoder,
-    is_pulse: bool,
 }
 
 impl NecIrDecoder {
@@ -252,10 +259,12 @@ impl NecIrDecoder {
         let program = build_ir_program();
         let installed = pio.install(&program).expect("PIO program install failed");
 
-        // Configure state machine
+        // Configure state machine. Shift LEFT so `in y, 1` after `mov isr, ~x`
+        // lands the polarity bit at ISR[0], producing `(count << 1) | polarity`.
         let (mut sm, rx, _tx) = PIOBuilder::from_installed_program(installed)
             .jmp_pin(pin_id)
             .in_pin_base(pin_id)
+            .in_shift_direction(ShiftDirection::Left)
             .clock_divisor_fixed_point(PIO_CLOCK_DIVISOR, 0)
             .build(sm);
 
@@ -265,7 +274,6 @@ impl NecIrDecoder {
         Self {
             rx,
             decoder: NecDecoder::new(),
-            is_pulse: true,
         }
     }
 
@@ -273,36 +281,23 @@ impl NecIrDecoder {
     ///
     /// Drains available data from the PIO FIFO and decodes it.
     /// Returns `Some(IrCommand)` when a complete valid command is decoded.
-    ///
-    /// Call this frequently (every ~10-50ms) to avoid FIFO overflow.
+    /// When `None` is returned, the FIFO has been fully drained (so a
+    /// level-triggered FIFO-not-empty IRQ will deassert).
     pub fn poll(&mut self) -> Option<IrCommand> {
-        // Process all available FIFO entries
-        while let Some(duration) = self.rx.read() {
-            if let Some(cmd) = self.decoder.process(duration, self.is_pulse) {
-                self.is_pulse = !self.is_pulse;
+        // Each FIFO word is (count << 1) | polarity, where polarity 0 = pulse
+        while let Some(word) = self.rx.read() {
+            let is_pulse = (word & 1) == 0;
+            let duration = word >> 1;
+            if let Some(cmd) = self.decoder.process(duration, is_pulse) {
                 return Some(cmd);
             }
-            self.is_pulse = !self.is_pulse;
         }
         None
     }
 
-    /// Check if there's data waiting in the FIFO
-    pub fn has_data(&mut self) -> bool {
-        !self.rx.is_empty()
-    }
-
-    /// Enable interrupt when RX FIFO is not empty
+    /// Enable the RX-FIFO-not-empty interrupt on PIO IRQ 0.
+    /// Level-triggered: deasserts automatically once the FIFO is fully drained.
     pub fn enable_fifo_interrupt(&self) {
         self.rx.enable_rx_not_empty_interrupt(PioIRQ::Irq0);
-    }
-
-    /// Reset decoder state (call after long delays to clear stale data)
-    pub fn reset(&mut self) {
-        // Drain FIFO
-        while self.rx.read().is_some() {}
-        // Reset state
-        self.decoder.reset();
-        self.is_pulse = true;
     }
 }
