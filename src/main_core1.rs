@@ -1,43 +1,65 @@
 //! Core1 task orchestration
 //!
-//! Interrupt-driven IR reception:
+//! Interrupt-driven IR reception with lock-free event signalling:
 //!   - PIO1 raises PIO1_IRQ_0 whenever its RX FIFO becomes non-empty.
 //!   - The ISR (`PIO1_IRQ_0`) drains the FIFO fully via `NecIrDecoder::poll`.
 //!     Because FIFO-not-empty is a *level-triggered* condition, draining the
 //!     FIFO causes the IRQ line to deassert — no masking dance required.
-//!   - Decoded commands set `IR_EVENT`; the main loop consumes it on wake.
+//!   - Decoded commands are pushed into an SPSC queue; the main loop dequeues
+//!     them on wake. The queue is lock-free (atomic head/tail indices) so
+//!     main's hot path stays critical-section-free.
 //!   - A 50ms timer alarm wakes core1 for LED housekeeping (blink timeout).
 //!
-//! The decoder lives in a `critical_section::Mutex<RefCell<Option<_>>>` so the
-//! ISR can borrow it exclusively. Core1 is the only accessor after init, so
-//! the critical section serves correctness against preemption, not cross-core.
+//! The ISR-side state (decoder + producer) lives in a
+//! `critical_section::Mutex<RefCell<Option<_>>>` to handle the install window.
+//! Once installed, only the ISR touches it, so the CS inside the ISR protects
+//! against init races rather than real concurrency. Main never takes that CS.
 
 use core::cell::RefCell;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 use cortex_m::asm::wfi;
 use cortex_m::peripheral::NVIC;
 use critical_section::Mutex;
 use embedded_hal::digital::OutputPin;
 use fugit::MicrosDurationU32;
+use heapless::spsc::{Consumer, Producer, Queue};
 use rp2040_hal::multicore::Multicore;
 use rp2040_hal::pac::{self, interrupt};
 use rp2040_hal::timer::Alarm;
 
 use crate::board::{BoardCore1, CORE1_PERIPHERALS, CORE1_STACK, MulticorePeripherals, SimpleLedPin};
-use crate::ir_nec_pio::NecIrDecoder;
+use crate::ir_nec_pio::{IrCommand, NecIrDecoder};
 
 /// Housekeeping interval: wakes core1 periodically to check whether the LED
 /// blink window has expired. Does not need to be short — the IR path is
 /// driven by PIO1_IRQ_0, not this alarm.
 const HOUSEKEEPING_INTERVAL_US: u32 = 50_000;
 
-/// Decoder owned by the PIO1_IRQ_0 ISR after init. Core1-only.
-static IR_DECODER: Mutex<RefCell<Option<NecIrDecoder>>> = Mutex::new(RefCell::new(None));
+/// Capacity of the ISR -> main SPSC event queue. Nominal traffic needs only
+/// a couple of slots (main drains on every PIO wake), but 16 gives headroom
+/// for misbehaving or multiple IR sources that burst frames faster than a
+/// single remote's repeat rate. Overflow drops the newest command.
+const EVENT_QUEUE_CAPACITY: usize = 16;
 
-/// Set by the ISR when a complete NEC command has been decoded.
-/// Main loop consumes it via `swap(false)` on wake.
-static IR_EVENT: AtomicBool = AtomicBool::new(false);
+/// Backing storage for the SPSC queue. Split once at core1 init into a
+/// `(Producer, Consumer)` pair; after that, the queue is accessed only via
+/// those two handles — never through this static directly.
+///
+/// SAFETY: this `static mut` is referenced exactly once, via `Queue::split`
+/// inside `main_core1`, before the PIO interrupt is enabled. From that point
+/// on the Producer and Consumer are the sole access paths, and they are
+/// lock-free between one producer and one consumer.
+static mut EVENT_QUEUE: Queue<IrCommand, EVENT_QUEUE_CAPACITY> = Queue::new();
+
+/// ISR-owned state: the decoder itself plus the producer end of the event
+/// queue. Bundled so one critical section in the ISR grants access to both.
+struct IrIsrState {
+    decoder: NecIrDecoder,
+    producer: Producer<'static, IrCommand, EVENT_QUEUE_CAPACITY>,
+}
+
+/// ISR state slot. Populated by `main_core1` before PIO1_IRQ_0 is unmasked.
+static IR_ISR_STATE: Mutex<RefCell<Option<IrIsrState>>> = Mutex::new(RefCell::new(None));
 
 /**
     Read the hardware timer (microseconds since boot).
@@ -111,12 +133,28 @@ fn main_core1(
     let mut led = LedBlinker::new(simple_led_pin);
     let mut alarm = alarm1;
 
-    // Hand the decoder to the ISR, then enable the PIO interrupt.
+    // Split the SPSC queue once. The producer goes into ISR-owned state;
+    // the consumer is a stack-local handle for the main loop.
+    //
+    // SAFETY: EVENT_QUEUE is accessed exactly once here, before the PIO
+    // interrupt is enabled, so there is no concurrent access. The producer
+    // and consumer returned are the only subsequent access paths to the
+    // queue, and Queue::split is the documented way to obtain them.
+    #[allow(static_mut_refs)]
+    let (producer, mut consumer): (
+        Producer<'static, IrCommand, EVENT_QUEUE_CAPACITY>,
+        Consumer<'static, IrCommand, EVENT_QUEUE_CAPACITY>,
+    ) = unsafe { EVENT_QUEUE.split() };
+
+    // Install ISR-owned state, then enable the PIO interrupt.
     // Order matters: install first, then unmask — otherwise an early IRQ
-    // could fire with IR_DECODER still None.
+    // could fire with IR_ISR_STATE still None.
     ir.enable_fifo_interrupt();
     critical_section::with(|cs| {
-        IR_DECODER.borrow(cs).replace(Some(ir));
+        IR_ISR_STATE.borrow(cs).replace(Some(IrIsrState {
+            decoder: ir,
+            producer,
+        }));
     });
     unsafe { NVIC::unmask(pac::Interrupt::PIO1_IRQ_0); }
 
@@ -128,13 +166,8 @@ fn main_core1(
     loop {
         wfi();
 
-        // Cortex-M0+ has no HW atomic RMW; emulate swap via a critical section.
-        let event = critical_section::with(|_| {
-            let v = IR_EVENT.load(Ordering::Relaxed);
-            IR_EVENT.store(false, Ordering::Relaxed);
-            v
-        });
-        if event {
+        // Lock-free dequeue — no critical section on main's hot path.
+        while let Some(_cmd) = consumer.dequeue() {
             led.trigger();
         }
         led.update();
@@ -149,13 +182,15 @@ fn main_core1(
 /// Drains the FIFO completely by calling `poll()` until it returns `None`.
 /// Because FIFO-not-empty is level-triggered on the RP2040 PIO, draining the
 /// FIFO causes the peripheral IRQ line to deassert automatically — no NVIC
-/// masking needed, no race with the main loop.
+/// masking needed, no race with the main loop. Each decoded command is
+/// pushed into the SPSC event queue; overflow drops the newest command
+/// (acceptable — the main loop will have drained by the next NEC frame).
 #[interrupt]
 fn PIO1_IRQ_0() {
     critical_section::with(|cs| {
-        if let Some(dec) = IR_DECODER.borrow(cs).borrow_mut().as_mut() {
-            while dec.poll().is_some() {
-                IR_EVENT.store(true, Ordering::Relaxed);
+        if let Some(state) = IR_ISR_STATE.borrow(cs).borrow_mut().as_mut() {
+            while let Some(cmd) = state.decoder.poll() {
+                let _ = state.producer.enqueue(cmd);
             }
         }
     });

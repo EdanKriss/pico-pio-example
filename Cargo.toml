@@ -46,6 +46,10 @@ ws2812-pio = "0.9.0"
 # PIO assembler for building PIO programs at compile time
 pio = "0.2.1"
 
+# Lock-free SPSC queue (and other no_std data structures) used for
+# ISR -> main_core1 event signalling without critical sections on the hot path.
+heapless = "0.8"
+
 # Optimize for small binary size
 [profile.release]
 opt-level = "z"      # Optimize for size

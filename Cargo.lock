@@ -288,6 +288,7 @@ dependencies = [
  "critical-section",
  "embedded-hal 1.0.0",
  "fugit",
+ "heapless",
  "panic-halt",
  "pio",
  "rp2040-boot2",
