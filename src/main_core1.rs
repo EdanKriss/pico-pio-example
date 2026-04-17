@@ -172,7 +172,6 @@ fn main_core1(
         }
         led.update();
 
-        alarm.clear_interrupt();
         let _ = alarm.schedule(MicrosDurationU32::micros(HOUSEKEEPING_INTERVAL_US));
     }
 }
@@ -199,7 +198,10 @@ fn PIO1_IRQ_0() {
 /// Timer interrupt handler - clears interrupt so WFI returns
 #[interrupt]
 fn TIMER_IRQ_1() {
-    // Clear at hardware level to prevent immediate re-fire
+    // Clear at hardware level to prevent immediate re-fire.
+    // Equivalent to Alarm1.clear_interrupt() without needing the alarm object to be scoped
+    // to the interrupt, which would require static ownership and a critical_section on every 
+    // interrupt occurrance.
     unsafe {
         (*pac::TIMER::ptr()).intr().write(|w| w.alarm_1().clear_bit_by_one());
     }
