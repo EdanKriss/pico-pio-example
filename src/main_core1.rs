@@ -27,7 +27,7 @@ use rp2040_hal::multicore::Multicore;
 use rp2040_hal::pac::{self, interrupt};
 use rp2040_hal::timer::Alarm;
 
-use crate::board::{BoardCore1, CORE1_PERIPHERALS, CORE1_STACK, MulticorePeripherals, SimpleLedPin};
+use crate::board::{BoardCore1, CORE1_PERIPHERALS, CORE1_STACK, MulticorePeripherals, SimpleLedPin, read_timer_us};
 use crate::ir_nec_pio::{IrCommand, NecIrDecoder};
 
 /// Housekeeping interval: wakes core1 periodically to check whether the LED
@@ -60,28 +60,6 @@ struct IrIsrState {
 
 /// ISR state slot. Populated by `main_core1` before PIO1_IRQ_0 is unmasked.
 static IR_ISR_STATE: Mutex<RefCell<Option<IrIsrState>>> = Mutex::new(RefCell::new(None));
-
-/**
-    Read the hardware timer (microseconds since boot).
-
-    Returns valid data AFTER hal::Timer::new() in Board::init(), returns garbage data before
-
-    Safety:
-        - Data Race: TIMERAWL is a read-only register that both cores can read concurrently
-        - Panic/Fault: peripheral registers in memory region 0x40000000 - 0x4FFFFFFF never faults on read
-
-    Uses raw dereference rather than the HAL Timer struct because Timer is owned by core0.
-    Raw register access is the standard approach in C/C++ embedded.
-
-    Alternatives considered:
-        - Move/Refer Timer to core1: Both cores need access, but Timer isn't Send/Sync
-        - Wrap Timer in Mutex: Blocks cores on reads
-        - Message passing via FIFO: Adds latency to reads
- */
-#[inline(always)]
-fn read_timer_us() -> u32 {
-    unsafe { (*rp2040_hal::pac::TIMER::ptr()).timerawl().read().bits() }
-}
 
 /// LED blink state
 struct LedBlinker {

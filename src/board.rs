@@ -45,7 +45,7 @@ pub struct MulticorePeripherals {
     pub sio_fifo: SioFifo,
     pub psm: hal::pac::PSM,
     pub ppb: hal::pac::PPB,
-}
+}   
 
 /// Peripherals to be transferred to core1
 pub struct BoardCore1 {
@@ -61,6 +61,28 @@ pub static CORE1_STACK: Stack<4096> = Stack::new();
 
 /// Mutex for transferring BoardCore1 to core1
 pub static CORE1_PERIPHERALS: Mutex<RefCell<Option<BoardCore1>>> = Mutex::new(RefCell::new(None));
+
+/**
+    Read the hardware timer (microseconds since boot).
+
+    Returns valid data AFTER hal::Timer::new() in Board::init()
+
+    Safety:
+        - Data Race: TIMERAWL is a read-only register that both cores can read concurrently
+        - Panic/Fault: peripheral registers in memory region 0x40000000 - 0x4FFFFFFF never faults on read
+
+    Uses raw register access because the HAL Timer struct is owned by core0.
+    Raw register access is the standard approach in C/C++ embedded.
+
+    Alternatives considered:
+        - Move/Refer Timer to core1: Both cores need access, but Timer isn't Send/Sync
+        - Wrap Timer in Mutex: Blocks cores on reads
+        - Message passing via FIFO: Adds latency to reads
+ */
+#[inline(always)]
+pub fn read_timer_us() -> u32 {
+    unsafe { (*hal::pac::TIMER::ptr()).timerawl().read().bits() }
+}
 
 impl Board {
     pub fn init() -> (Self, BoardCore1) {
