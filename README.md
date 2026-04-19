@@ -9,7 +9,10 @@ These effectively serve as 8 separate state machines that can operate on IO as i
 This project seeks to utilize PIO for input peripherals, such as the IR sensor.
 Interrupts are registered to fire on incoming data, allowing core1 to sleep when data is not arriving.
 
-Datasheets for Picobricks and supplied peripherals can be found here:
+Datasheet for the RP2040:
+https://pip-assets.raspberrypi.com/categories/814-rp2040/documents/RP-008371-DS-1-rp2040-datasheet.pdf?disposition=inline
+
+Datasheets for Picobricks and supplied peripherals:
 https://github.com/Robotistan/PicoBricks/blob/main/Documents/Datasheets
 
 ## Prerequisites

@@ -50,6 +50,16 @@ pio = "0.2.1"
 # ISR -> main_core1 event signalling without critical sections on the hot path.
 heapless = "0.8"
 
+# Safe, once-initialized static cells. Replaces `static mut` + `#[allow(static_mut_refs)]`
+# for the SPSC queue statics — StaticCell::init returns `&'static mut T` exactly once,
+# enforced at runtime with no unsafe at the call site.
+static_cell = "2"
+
+# Pulled in transitively by static_cell via portable-atomic. Cortex-M0+ has no atomic CAS,
+# so portable-atomic needs the `critical-section` feature to emulate it using the
+# critical-section impl already provided by rp2040-hal.
+portable-atomic = { version = "1", features = ["critical-section"] }
+
 # SSD1306 OLED display driver (I2C) - PicoBricks built-in 128x64 screen
 ssd1306 = "0.9"
 

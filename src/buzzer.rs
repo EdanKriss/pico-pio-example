@@ -1,14 +1,12 @@
+use rp2040_hal as hal;
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 
-use crate::board::Board;
+use crate::board::BuzzerPin;
 
 fn play_tone(
-    Board {
-        timer,
-        buzzer,
-        ..
-    }: &mut Board,
+    timer: &mut hal::Timer,
+    buzzer: &mut BuzzerPin,
     freq_hz: u32,
     duration_ms: u32,
 ) {
@@ -29,17 +27,23 @@ fn play_tone(
     }
 }
 
-pub fn error_beep(board: &mut Board) {
+pub fn error_beep(
+    timer: &mut hal::Timer,
+    buzzer: &mut BuzzerPin,
+) {
     // Descending minor third, like "uh-oh"
     const HIGH: u32 = 400;
     const LOW: u32 = 320;
 
-    play_tone(board, HIGH, 150);
-    board.timer.delay_ms(50);
-    play_tone(board, LOW, 300);
+    play_tone(timer, buzzer, HIGH, 150);
+    timer.delay_ms(50);
+    play_tone(timer, buzzer, LOW, 300);
 }
 
-pub fn zelda_chest_sound(board: &mut Board) {
+pub fn zelda_chest_sound(
+    timer: &mut hal::Timer,
+    buzzer: &mut BuzzerPin,
+) {
     // Note frequencies
     const A4: u32 = 440;
     const CS5: u32 = 554;
@@ -47,9 +51,9 @@ pub fn zelda_chest_sound(board: &mut Board) {
     const A5: u32 = 880;
 
     // Quick ascending arpeggio
-    play_tone(board, A4, 100);
-    play_tone(board, CS5, 100);
-    play_tone(board, E5, 100);
+    play_tone(timer, buzzer, A4, 100);
+    play_tone(timer, buzzer, CS5, 100);
+    play_tone(timer, buzzer, E5, 100);
     // Triumphant sustained note
-    play_tone(board, A5, 600);
+    play_tone(timer, buzzer, A5, 600);
 }

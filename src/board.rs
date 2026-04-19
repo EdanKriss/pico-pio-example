@@ -16,6 +16,7 @@ use ssd1306::{
     prelude::{DisplayRotation, I2CInterface},
     size::DisplaySize128x64,
 };
+use static_cell::StaticCell;
 use ws2812_pio::Ws2812;
 
 use crate::ir_nec_pio::IrCommand;
@@ -60,11 +61,12 @@ pub const CORE0_IR_QUEUE_CAPACITY: usize = 16;
 pub type Core0IrProducer = Producer<'static, IrCommand, CORE0_IR_QUEUE_CAPACITY>;
 pub type Core0IrConsumer = Consumer<'static, IrCommand, CORE0_IR_QUEUE_CAPACITY>;
 
-/// Backing storage for the core1 -> core0 forwarding queue. Split exactly once
-/// inside `Board::init()` before core1 is spawned; after that the Producer
-/// (moved into BoardCore1) and Consumer (returned to main) are the only
-/// access paths.
-static mut CORE0_IR_QUEUE: Queue<IrCommand, CORE0_IR_QUEUE_CAPACITY> = Queue::new();
+/// Backing storage for the core1 -> core0 forwarding queue. Initialized
+/// exactly once inside `Board::init()` before core1 is spawned; after that
+/// the Producer (moved into BoardCore1) and Consumer (returned to main) are
+/// the only access paths. `StaticCell::init` panics on a second call, which
+/// enforces the once-only contract at runtime.
+static CORE0_IR_QUEUE: StaticCell<Queue<IrCommand, CORE0_IR_QUEUE_CAPACITY>> = StaticCell::new();
 
 /// Peripherals owned by core0
 pub struct Board {
@@ -193,12 +195,8 @@ impl Board {
         // after an MCU reset.
         let _ = oled.flush();
 
-        // SAFETY: Queue::split is called exactly once here, before core1 is
-        // spawned, so there is no concurrent access. The Producer (moved into
-        // BoardCore1) and the Consumer (returned to main) are the only
-        // subsequent access paths.
-        #[allow(static_mut_refs)]
-        let (ir_command_producer, ir_command_consumer) = unsafe { CORE0_IR_QUEUE.split() };
+        let (ir_command_producer, ir_command_consumer) =
+            CORE0_IR_QUEUE.init(Queue::new()).split();
 
         let multicore_peripherals = MulticorePeripherals {
             sio_fifo: sio.fifo,

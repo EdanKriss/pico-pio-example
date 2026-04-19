@@ -26,6 +26,7 @@ use heapless::spsc::{Consumer, Producer, Queue};
 use rp2040_hal::multicore::Multicore;
 use rp2040_hal::pac::{self, interrupt};
 use rp2040_hal::timer::Alarm;
+use static_cell::StaticCell;
 
 use crate::board::{BoardCore1, CORE1_PERIPHERALS, CORE1_STACK, MulticorePeripherals, SimpleLedPin, read_timer_us};
 use crate::ir_nec_pio::{IrCommand, NecIrDecoder};
@@ -41,15 +42,12 @@ const HOUSEKEEPING_INTERVAL_US: u32 = 50_000;
 /// single remote's repeat rate. Overflow drops the newest command.
 const EVENT_QUEUE_CAPACITY: usize = 16;
 
-/// Backing storage for the SPSC queue. Split once at core1 init into a
+/// Backing storage for the SPSC queue. Initialized once at core1 init into a
 /// `(Producer, Consumer)` pair; after that, the queue is accessed only via
-/// those two handles — never through this static directly.
-///
-/// SAFETY: this `static mut` is referenced exactly once, via `Queue::split`
-/// inside `main_core1`, before the PIO interrupt is enabled. From that point
-/// on the Producer and Consumer are the sole access paths, and they are
-/// lock-free between one producer and one consumer.
-static mut EVENT_QUEUE: Queue<IrCommand, EVENT_QUEUE_CAPACITY> = Queue::new();
+/// those two handles — never through this static directly. `StaticCell::init`
+/// panics on a second call, enforcing the once-only contract at runtime.
+/// The split itself is lock-free between one producer and one consumer.
+static EVENT_QUEUE: StaticCell<Queue<IrCommand, EVENT_QUEUE_CAPACITY>> = StaticCell::new();
 
 /// ISR-owned state: the decoder itself plus the producer end of the event
 /// queue. Bundled so one critical section in the ISR grants access to both.
@@ -112,18 +110,14 @@ fn main_core1(
     let mut led = LedBlinker::new(simple_led_pin);
     let mut alarm = alarm1;
 
-    // Split the SPSC queue once. The producer goes into ISR-owned state;
-    // the consumer is a stack-local handle for the main loop.
-    //
-    // SAFETY: EVENT_QUEUE is accessed exactly once here, before the PIO
-    // interrupt is enabled, so there is no concurrent access. The producer
-    // and consumer returned are the only subsequent access paths to the
-    // queue, and Queue::split is the documented way to obtain them.
-    #[allow(static_mut_refs)]
+    // Initialize and split the SPSC queue once. The producer goes into
+    // ISR-owned state; the consumer is a stack-local handle for the main loop.
+    // `StaticCell::init` runs before the PIO interrupt is enabled and panics
+    // on any second call, so concurrent or duplicate init is impossible.
     let (producer, mut consumer): (
         Producer<'static, IrCommand, EVENT_QUEUE_CAPACITY>,
         Consumer<'static, IrCommand, EVENT_QUEUE_CAPACITY>,
-    ) = unsafe { EVENT_QUEUE.split() };
+    ) = EVENT_QUEUE.init(Queue::new()).split();
 
     // Install ISR-owned state, then enable the PIO interrupt.
     // Order matters: install first, then unmask — otherwise an early IRQ

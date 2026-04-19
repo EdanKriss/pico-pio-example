@@ -435,10 +435,12 @@ dependencies = [
  "heapless",
  "panic-halt",
  "pio",
+ "portable-atomic",
  "rp2040-boot2",
  "rp2040-hal",
  "smart-leds",
  "ssd1306",
+ "static_cell",
  "ws2812-pio",
 ]
 
@@ -458,6 +460,9 @@ name = "portable-atomic"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f89776e4d69bb58bc6993e99ffa1d11f228b839984854c7daeb5d37f87cbe950"
+dependencies = [
+ "critical-section",
+]
 
 [[package]]
 name = "proc-macro-utils"
@@ -669,6 +674,15 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "static_cell"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0530892bb4fa575ee0da4b86f86c667132a94b74bb72160f58ee5a4afec74c23"
+dependencies = [
+ "portable-atomic",
+]
 
 [[package]]
 name = "syn"
