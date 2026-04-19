@@ -50,6 +50,12 @@ pio = "0.2.1"
 # ISR -> main_core1 event signalling without critical sections on the hot path.
 heapless = "0.8"
 
+# SSD1306 OLED display driver (I2C) - PicoBricks built-in 128x64 screen
+ssd1306 = "0.9"
+
+# Drawing primitives and fonts rendered into the SSD1306 framebuffer
+embedded-graphics = "0.8"
+
 # Optimize for small binary size
 [profile.release]
 opt-level = "z"      # Optimize for size

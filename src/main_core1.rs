@@ -105,6 +105,7 @@ fn main_core1(
         pio1,
         pio1_sm0,
         alarm1,
+        mut ir_command_producer,
     }: BoardCore1,
 ) -> ! {
     let ir = NecIrDecoder::new(ir_receiver_pin, pio1, pio1_sm0);
@@ -145,8 +146,11 @@ fn main_core1(
         wfi();
 
         // Lock-free dequeue — no critical section on main's hot path.
-        while let Some(_cmd) = consumer.dequeue() {
+        // Forward each command to core0 for OLED rendering; overflow drops
+        // newest (acceptable, OLED only needs the latest anyway).
+        while let Some(cmd) = consumer.dequeue() {
             led.trigger();
+            let _ = ir_command_producer.enqueue(cmd);
         }
         led.update();
 

@@ -36,6 +36,11 @@ mod timing {
     // NEC leader space: 4.5ms = 2250 counts
     pub const LEADER_SPACE_MIN: u32 = 2000;
     pub const LEADER_SPACE_MAX: u32 = 2500;
+    // NEC repeat-frame space: 2.25ms = 1125 counts (half of the leader space).
+    // A repeat frame is 9ms pulse + 2.25ms space + 562µs pulse, sent ~110ms
+    // after the initial command and every ~110ms while the button is held.
+    pub const REPEAT_SPACE_MIN: u32 = 900;
+    pub const REPEAT_SPACE_MAX: u32 = 1300;
     // Bit pulse: 562.5µs = 281 counts
     pub const BIT_PULSE_MIN: u32 = 200;
     pub const BIT_PULSE_MAX: u32 = 400;
@@ -53,26 +58,46 @@ pub struct IrCommand {
     pub command: u8,
 }
 
-/// Known button codes for PicoBricks remote
-#[allow(dead_code)]
-pub mod buttons {
-    pub const KEY_0: u8 = 0x16;
-    pub const KEY_1: u8 = 0x0C;
-    pub const KEY_2: u8 = 0x18;
-    pub const KEY_3: u8 = 0x5E;
-    pub const KEY_4: u8 = 0x08;
-    pub const KEY_5: u8 = 0x1C;
-    pub const KEY_6: u8 = 0x5A;
-    pub const KEY_7: u8 = 0x42;
-    pub const KEY_8: u8 = 0x52;
-    pub const KEY_9: u8 = 0x4A;
-    pub const KEY_STAR: u8 = 0x40;
-    pub const KEY_HASH: u8 = 0x43;
-    pub const KEY_UP: u8 = 0x46;
-    pub const KEY_DOWN: u8 = 0x15;
-    pub const KEY_LEFT: u8 = 0x44;
-    pub const KEY_RIGHT: u8 = 0x07;
-    pub const KEY_OK: u8 = 0x47;
+/// Known button codes for the PicoBricks remote.
+///
+/// Generates named `pub const NAME: u8 = VALUE` declarations and a reverse lookup
+/// via `buttons::name_of(cmd: u8) -> &'static str` from the buttons! invocation.
+macro_rules! buttons {
+    ($($name:ident = $value:literal),* $(,)?) => {
+        #[allow(dead_code)]
+        pub mod buttons {
+            $(pub const $name: u8 = $value;)*
+
+            /// Returns the button label for a NEC command byte, or
+            /// `"UNKNOWN"` for codes not on the PicoBricks remote.
+            pub fn name_of(cmd: u8) -> &'static str {
+                match cmd {
+                    $($value => stringify!($name),)*
+                    _ => "UNKNOWN",
+                }
+            }
+        }
+    };
+}
+
+buttons! {
+    KEY_0 = 0x19,
+    KEY_1 = 0x45,
+    KEY_2 = 0x46,
+    KEY_3 = 0x47,
+    KEY_4 = 0x44,
+    KEY_5 = 0x40,
+    KEY_6 = 0x43,
+    KEY_7 = 0x07,
+    KEY_8 = 0x15,
+    KEY_9 = 0x09,
+    KEY_STAR = 0x16,
+    KEY_HASH = 0x0D,
+    KEY_UP = 0x18,
+    KEY_DOWN = 0x52,
+    KEY_LEFT = 0x08,
+    KEY_RIGHT = 0x5A,
+    KEY_OK = 0x1C,
 }
 
 /// Build the PIO program for IR pulse/space measurement
@@ -152,6 +177,10 @@ struct NecDecoder {
     state: DecoderState,
     bits_received: u8,
     data: u32,
+    /// Most recently decoded command. Re-emitted when a NEC repeat frame is
+    /// seen (9ms pulse + 2.25ms space) so holding a remote button produces a
+    /// stream of the same IrCommand every ~110ms.
+    last_command: Option<IrCommand>,
 }
 
 impl NecDecoder {
@@ -160,6 +189,7 @@ impl NecDecoder {
             state: DecoderState::LeaderPulse,
             bits_received: 0,
             data: 0,
+            last_command: None,
         }
     }
 
@@ -177,6 +207,24 @@ impl NecDecoder {
                     self.state = DecoderState::BitPulse;
                     self.bits_received = 0;
                     self.data = 0;
+                } else if !is_pulse
+                    && (timing::REPEAT_SPACE_MIN..=timing::REPEAT_SPACE_MAX).contains(&duration)
+                {
+                    // NEC repeat frame: no data follows — re-emit the last
+                    // decoded command. The trailing 562µs pulse is silently
+                    // absorbed by LeaderPulse (doesn't match its timing range).
+                    //
+                    // TODO: configurable repeat-debounce interval.
+                    // Native NEC repeats fire every ~110ms, which is almost
+                    // certainly too fast for user-facing scroll/hold actions
+                    // (~9Hz). Add a minimum interval between emitted repeats
+                    // (e.g. 250ms default, caller-overridable) so holding a
+                    // button produces usable step rates. Needs a time source
+                    // (`board::read_timer_us`) threaded into the decoder, or
+                    // done at the consumer layer instead. Revisit once there
+                    // is a scrollable UI to tune against.
+                    self.state = DecoderState::LeaderPulse;
+                    return self.last_command;
                 } else {
                     self.reset();
                 }
@@ -205,6 +253,12 @@ impl NecDecoder {
                     if self.bits_received == 32 {
                         let result = self.decode_command();
                         self.reset();
+                        // Remember the last *valid* command so repeat frames
+                        // can re-emit it; a bad checksum leaves the previous
+                        // held command intact rather than overwriting with None.
+                        if result.is_some() {
+                            self.last_command = result;
+                        }
                         return result;
                     } else {
                         self.state = DecoderState::BitPulse;

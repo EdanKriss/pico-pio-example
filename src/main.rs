@@ -5,6 +5,7 @@ mod board;
 mod buzzer;
 mod main_core1;
 mod ir_nec_pio;
+mod oled;
 mod rgb_led;
 
 use rp2040_boot2::BOOT_LOADER_GENERIC_03H;
@@ -13,8 +14,8 @@ use cortex_m_rt::entry;
 use fugit::ExtU32;
 use smart_leds::RGB8;
 
-use crate::buzzer::{error_beep, zelda_chest_sound};
-use crate::rgb_led::{PicoBricksRgbLedSequence, smart_leds_simple_sequence};
+use crate::buzzer::zelda_chest_sound;
+use crate::rgb_led::{PicoBricksLedStepper, PicoBricksRgbLedSequence};
 
 /**
     Link the second stage bootloader for RP2040 to the .boot2 section in memory.x
@@ -26,7 +27,7 @@ static BOOT2: [u8; 256] = BOOT_LOADER_GENERIC_03H;
 
 #[entry]
 fn main() -> ! {
-    let (mut board, core1_peripherals) = board::Board::init();
+    let (mut board, core1_peripherals, mut ir_consumer) = board::Board::init();
 
     zelda_chest_sound(&mut board);
 
@@ -43,18 +44,16 @@ fn main() -> ! {
         [ RGB8::new(0, 0, 0) ],    // Off
     ];
 
+    let mut led_stepper = PicoBricksLedStepper::new(sequence, 300);
+
     board.watchdog.start(8_u32.secs());
 
     loop {
-        if smart_leds_simple_sequence(
-            &sequence,
-            300,
-            &mut board.rgb_led_chain,
-            &mut board.timer
-        ).is_err()
-        {
-            error_beep(&mut board);
+        while let Some(cmd) = ir_consumer.dequeue() {
+            oled::show_command(&mut board.oled, cmd);
         }
+
+        let _ = led_stepper.update(&mut board.rgb_led_chain);
 
         board.watchdog.feed();
     }
