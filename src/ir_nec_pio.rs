@@ -64,6 +64,8 @@ pub struct IrCommand {
 /// via `buttons::name_of(cmd: u8) -> &'static str` from the buttons! invocation.
 macro_rules! buttons {
     ($($name:ident = $value:literal),* $(,)?) => {
+        // The generate const declarations are dead code until button handlers
+        // are implemented which will key off of them.
         #[allow(dead_code)]
         pub mod buttons {
             $(pub const $name: u8 = $value;)*

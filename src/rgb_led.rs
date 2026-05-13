@@ -12,14 +12,8 @@ type LedChainUpdate<const LED_CHAIN_LENGTH: usize> =
 /**
  *  One element for each LedChainUpdate, corresponding to steps in a sequence.
  */
-type LedChainSequence<const LED_CHAIN_LENGTH: usize, const SEQUENCE_LENGTH: usize> =
+pub type LedChainSequence<const LED_CHAIN_LENGTH: usize, const SEQUENCE_LENGTH: usize> =
     [LedChainUpdate<LED_CHAIN_LENGTH>; SEQUENCE_LENGTH];
-
-/**
- *  PicoBricks built-in LED "chain" only has one Ws2812 LED.
- */
-pub type PicoBricksRgbLedSequence<const SEQUENCE_LENGTH: usize> =
-    LedChainSequence<1, SEQUENCE_LENGTH>;
 
 /**
  *  Non-blocking sequence stepper.

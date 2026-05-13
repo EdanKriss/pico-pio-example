@@ -15,7 +15,7 @@ use fugit::ExtU32;
 use smart_leds::RGB8;
 
 use crate::buzzer::zelda_chest_sound;
-use crate::rgb_led::{PicoBricksLedStepper, PicoBricksRgbLedSequence};
+use crate::rgb_led::{PicoBricksLedStepper};
 
 /**
     Link the second stage bootloader for RP2040 to the .boot2 section in memory.x
@@ -27,7 +27,11 @@ static BOOT2: [u8; 256] = BOOT_LOADER_GENERIC_03H;
 
 #[entry]
 fn main() -> ! {
-    let (mut board, core1_peripherals, mut ir_consumer) = board::Board::init();
+    let (
+        mut board,
+        core1_peripherals,
+        mut ir_consumer
+    ) = board::Board::init();
 
     zelda_chest_sound(&mut board.timer, &mut board.buzzer);
 
@@ -36,15 +40,13 @@ fn main() -> ! {
         core1_peripherals,
     );
 
-    let sequence: PicoBricksRgbLedSequence<5> = [
+    let mut led_stepper = PicoBricksLedStepper::new([
         [ RGB8::new(32, 0, 0) ],   // Red
         [ RGB8::new(0, 32, 0) ],   // Green
         [ RGB8::new(0, 0, 32) ],   // Blue
         [ RGB8::new(12, 12, 12) ], // White
         [ RGB8::new(0, 0, 0) ],    // Off
-    ];
-
-    let mut led_stepper = PicoBricksLedStepper::new(sequence, 300);
+    ], 300);
 
     board.watchdog.start(8_u32.secs());
 

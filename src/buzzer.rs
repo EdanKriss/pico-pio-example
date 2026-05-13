@@ -27,6 +27,7 @@ fn play_tone(
     }
 }
 
+#[allow(dead_code)]
 pub fn error_beep(
     timer: &mut hal::Timer,
     buzzer: &mut BuzzerPin,
